@@ -1,6 +1,6 @@
 streamlit
 moviepy==1.0.3
 openai-whisper
-setuptools==80.9.0
+setuptools
 imageio==2.31.1
 imageio-ffmpeg==0.4.8
