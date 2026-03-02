@@ -5,88 +5,75 @@ from moviepy.video.fx.all import crop
 import whisper
 import gc
 import random
-import time
 
 # --- PRO UI DESIGN ---
-st.set_page_config(page_title="ApexClip Opus-Pro", layout="wide")
-st.markdown("""
-    <style>
-    .stApp { background-color: #0c0d10; color: #ffffff; }
-    .clip-card { 
-        background-color: #1a1c23; 
-        padding: 20px; 
-        border-radius: 15px; 
-        border: 1px solid #30363d;
-        margin-bottom: 25px;
-    }
-    .virality-badge { background: linear-gradient(90deg, #ff4b4b, #ff8e53); color: white; padding: 4px 12px; border-radius: 15px; font-weight: bold; }
-    </style>
-    """, unsafe_allow_html=True)
+st.set_page_config(page_title="ApexClip Pro", layout="wide")
+st.markdown("<style>.stApp { background-color: #0c0d10; color: #fff; } .clip-card { background: #1a1c23; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #333; }</style>", unsafe_allow_html=True)
 
 st.title("🚀 APEXCLIP PRO: VIRAL DASHBOARD")
 
-uploaded_file = st.file_uploader("Upload Video (MP4)", type=["mp4"])
+uploaded_file = st.file_uploader("Upload Video", type=["mp4"])
 
 if uploaded_file:
-    # Save input file
-    input_path = "input_video.mp4"
+    # 1. Save input to a solid path
+    input_path = os.path.join(os.getcwd(), "input_video.mp4")
     with open(input_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
     
     if st.button("🔥 GENERATE VIRAL CLIPS"):
-        # We use a container so the clips appear immediately as they are ready
-        container = st.container()
-        
-        with st.status("🛸 AI is slicing your video...") as status:
+        with st.status("🛸 AI is scanning and rendering...") as status:
+            # Load AI
             model = whisper.load_model("tiny")
-            result = model.transcribe(input_path, word_timestamps=True)
+            result = model.transcribe(input_path)
             full_video = mp.VideoFileClip(input_path)
             
-            for i, segment in enumerate(result['segments'][:5]):
+            # We will store clip info here to show them later
+            generated_clips = []
+
+            for i, segment in enumerate(result['segments'][:3]): # Start with 3 to test speed
                 start, end = segment['start'], segment['end']
-                if (end - start) < 5: continue 
+                if (end - start) < 4: continue
                 
                 # Metadata
                 v_title = " ".join(segment['text'].strip().split()[:5]).upper() + " 🚀"
-                v_desc = f"{segment['text'].strip()}\n\n#viral #whop #success #ai"
+                v_desc = f"{segment['text'].strip()}\n\n#viral #whop #ai"
                 
-                # Processing
+                # Vertical Crop Logic
                 clip = full_video.subclip(start, end)
                 w, h = clip.size
                 target_w = h * (9/16)
                 clip_v = crop(clip, x_center=w/2, y_center=h/2, width=min(target_w, w), height=h)
                 
-                out_path = f"output_clip_{i}.mp4"
-                # Write the file
-                clip_v.write_videofile(out_path, codec="libx264", audio_codec="aac", fps=24, logger=None)
+                # SAVE PROCESS - Essential for Cloud
+                out_name = f"clip_{i}.mp4"
+                out_path = os.path.join(os.getcwd(), out_name)
                 
-                # IMPORTANT: Close clip to free file for Streamlit to read
+                # Using 'libx264' is the secret for web playback
+                clip_v.write_videofile(out_path, codec="libx264", audio_codec="aac", temp_audiofile='temp-audio.m4a', remove_temp=True, fps=24, logger=None)
+                
+                # Store data
+                generated_clips.append({"path": out_path, "title": v_title, "desc": v_desc, "name": out_name})
+                
                 clip_v.close()
                 clip.close()
-                
-                # --- RENDER TO UI IMMEDIATELY ---
-                with container:
-                    st.markdown(f'<div class="clip-card">', unsafe_allow_html=True)
-                    st.markdown(f"### 📋 Clip {i+1} <span class='virality-badge'>Score: {random.randint(92,99)}%</span>", unsafe_allow_html=True)
-                    
-                    col1, col2 = st.columns([1, 1])
-                    with col1:
-                        # Check if file exists before showing
-                        if os.path.exists(out_path):
-                            st.video(out_path)
-                            with open(out_path, "rb") as f:
-                                st.download_button(f"📥 Download HD Clip {i+1}", f, file_name=f"Apex_Clip_{i+1}.mp4")
-                        else:
-                            st.error("Video file generation failed.")
-                    
-                    with col2:
-                        st.write("**Viral Title:**")
-                        st.code(v_title)
-                        st.write("**AI Description:**")
-                        st.code(v_desc)
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
                 gc.collect()
 
             full_video.close()
-            st.balloons()
+
+        # --- DISPLAY RESULTS ---
+        for clip_data in generated_clips:
+            with st.container():
+                st.markdown(f'<div class="clip-card">', unsafe_allow_html=True)
+                col1, col2 = st.columns([1, 1])
+                
+                with col1:
+                    if os.path.exists(clip_data["path"]):
+                        # Open as binary so Streamlit doesn't lose the path
+                        with open(clip_data["path"], "rb") as v_file:
+                            st.video(v_file.read())
+                            st.download_button(f"📥 Download {clip_data['name']}", v_file, file_name=clip_data['name'])
+                
+                with col2:
+                    st.subheader(clip_data["title"])
+                    st.code(clip_data["desc"])
+                st.markdown('</div>', unsafe_allow_html=True)
